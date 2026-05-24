@@ -1,0 +1,579 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Guest 666 Hub V1.4",
+   LoadingTitle = "Guest 666 Hub V1.4",
+   LoadingSubtitle = "By Guest666_20 (Tiktok)",
+   ConfigurationSaving = { Enabled = true, FolderName = "Guest666_V14", FileName = "Main" },
+   Discord = { Enabled = false },
+   KeySystem = false,
+})
+
+-- ==========================================
+-- [ระบบตัวแปรพื้นฐาน]
+-- ==========================================
+local SavedPos, WalkSpeedValue = nil, 16
+local JumpPowerValue = 50
+local ESP_Enabled, Object_ESP_Enabled, InfiniteJumpEnabled = false, false, false
+local NPCAimEnabled, InstantProximityEnabled, FullBrightEnabled = false, false, false
+local SelectedObject = "None"
+
+-- ==========================================
+-- [FOV Circle สีขาวเฉพาะขอบ]
+-- ==========================================
+local FOV_Circle = Drawing.new("Circle")
+FOV_Circle.Visible = false
+FOV_Circle.Thickness = 2
+FOV_Circle.Color = Color3.fromRGB(255, 255, 255)
+FOV_Circle.Filled = false
+FOV_Circle.Radius = 100
+FOV_Circle.Transparency = 0.8
+FOV_Circle.NumSides = 64
+
+-- ==========================================
+-- [Aimbot Variables]
+-- ==========================================
+local AimbotEnabled = false
+local AimbotWallCheck = false
+local AimbotKillCheck = false
+local AimbotSmoothness = 5
+local AimbotFOV = 200
+local AimbotTargetPart = "Head"
+local AimbotTeamCheck = false
+
+local function CanSee(targetPart)
+    if not AimbotWallCheck then return true end
+    local origin = workspace.CurrentCamera.CFrame.Position
+    local ray = Ray.new(origin, (targetPart.Position - origin))
+    local hit = workspace:FindPartOnRay(ray, game.Players.LocalPlayer.Character)
+    if hit and hit:IsDescendantOf(targetPart.Parent) then return true
+    elseif not hit then return true end
+    return false
+end
+
+local function IsTargetAlive(target)
+    if not AimbotKillCheck then return true end
+    local humanoid = target.Character and target.Character:FindFirstChild("Humanoid")
+    return humanoid and humanoid.Health > 0
+end
+
+local function GetClosestTarget()
+    local closest = nil
+    local closestDist = AimbotFOV
+    local center = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer then
+            if AimbotTeamCheck and player.Team == game.Players.LocalPlayer.Team then continue end
+            if not IsTargetAlive(player) then continue end
+            local targetPart = player.Character and player.Character:FindFirstChild(AimbotTargetPart)
+            if targetPart then
+                local screenPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(targetPart.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist < closestDist then
+                        if AimbotWallCheck and not CanSee(targetPart) then continue end
+                        closestDist = dist
+                        closest = targetPart
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function SmoothAim(targetPos)
+    local currentCF = workspace.CurrentCamera.CFrame
+    local targetCF = CFrame.new(currentCF.Position, targetPos)
+    local newCF = currentCF:Lerp(targetCF, 1 / AimbotSmoothness)
+    workspace.CurrentCamera.CFrame = newCF
+end
+
+-- ==========================================
+-- [Fly Guest 666]
+-- ==========================================
+local FlyGuestEnabled = false
+local FlyGuestTarget = nil
+local FlyGuestSpeed = 10
+
+local FlyGuestGui = Instance.new("ScreenGui")
+FlyGuestGui.Name = "FlyGuest666"
+FlyGuestGui.Parent = game:GetService("CoreGui")
+
+local FlyFrame = Instance.new("Frame")
+FlyFrame.Size = UDim2.new(0, 200, 0, 250)
+FlyFrame.Position = UDim2.new(0, 10, 0.5, -125)
+FlyFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+FlyFrame.BackgroundTransparency = 0.1
+FlyFrame.BorderSizePixel = 0
+FlyFrame.Visible = false
+FlyFrame.Parent = FlyGuestGui
+
+local FlyTitle = Instance.new("TextLabel")
+FlyTitle.Size = UDim2.new(1, 0, 0, 40)
+FlyTitle.Text = "Fly Guest 666"
+FlyTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+FlyTitle.BackgroundTransparency = 1
+FlyTitle.Parent = FlyFrame
+
+local PlayerList = Instance.new("ScrollingFrame")
+PlayerList.Size = UDim2.new(1, -10, 0, 150)
+PlayerList.Position = UDim2.new(0, 5, 0, 45)
+PlayerList.BackgroundTransparency = 1
+PlayerList.Parent = FlyFrame
+
+local UpBtn = Instance.new("TextButton")
+UpBtn.Size = UDim2.new(0, 60, 0, 40)
+UpBtn.Position = UDim2.new(0, 10, 1, -50)
+UpBtn.Text = "UP"
+UpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+UpBtn.Parent = FlyFrame
+
+local DownBtn = Instance.new("TextButton")
+DownBtn.Size = UDim2.new(0, 60, 0, 40)
+DownBtn.Position = UDim2.new(0, 80, 1, -50)
+DownBtn.Text = "DOWN"
+DownBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+DownBtn.Parent = FlyFrame
+
+local FlyBtn = Instance.new("TextButton")
+FlyBtn.Size = UDim2.new(0, 60, 0, 40)
+FlyBtn.Position = UDim2.new(0, 150, 1, -50)
+FlyBtn.Text = "FLY"
+FlyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+FlyBtn.Parent = FlyFrame
+
+local function UpdatePlayerList()
+    for _, v in pairs(PlayerList:GetChildren()) do
+        if v:IsA("TextButton") then v:Destroy() end
+    end
+    local y = 0
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -10, 0, 35)
+            btn.Position = UDim2.new(0, 0, 0, y)
+            btn.Text = player.Name
+            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+            btn.Parent = PlayerList
+            btn.MouseButton1Click:Connect(function()
+                FlyGuestTarget = player
+                for _, v in pairs(PlayerList:GetChildren()) do
+                    if v:IsA("TextButton") then v.BackgroundColor3 = Color3.fromRGB(40, 40, 55) end
+                end
+                btn.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+            end)
+            y = y + 40
+        end
+    end
+    PlayerList.CanvasSize = UDim2.new(0, 0, 0, y)
+end
+
+game.Players.PlayerAdded:Connect(UpdatePlayerList)
+game.Players.PlayerRemoving:Connect(UpdatePlayerList)
+
+UpBtn.MouseButton1Click:Connect(function()
+    if FlyGuestTarget and FlyGuestTarget.Character and FlyGuestTarget.Character:FindFirstChild("HumanoidRootPart") then
+        FlyGuestTarget.Character.HumanoidRootPart.CFrame = FlyGuestTarget.Character.HumanoidRootPart.CFrame + Vector3.new(0, FlyGuestSpeed, 0)
+    end
+end)
+
+DownBtn.MouseButton1Click:Connect(function()
+    if FlyGuestTarget and FlyGuestTarget.Character and FlyGuestTarget.Character:FindFirstChild("HumanoidRootPart") then
+        FlyGuestTarget.Character.HumanoidRootPart.CFrame = FlyGuestTarget.Character.HumanoidRootPart.CFrame - Vector3.new(0, FlyGuestSpeed, 0)
+    end
+end)
+
+FlyBtn.MouseButton1Click:Connect(function()
+    if FlyGuestTarget and FlyGuestTarget.Character and FlyGuestTarget.Character:FindFirstChild("HumanoidRootPart") then
+        local bodyVel = Instance.new("BodyVelocity")
+        bodyVel.MaxForce = Vector3.new(100000, 100000, 100000)
+        bodyVel.Parent = FlyGuestTarget.Character.HumanoidRootPart
+        game:GetService("RunService").RenderStepped:Connect(function()
+            if FlyGuestTarget and FlyGuestTarget.Character and bodyVel.Parent then
+                local cam = workspace.CurrentCamera
+                bodyVel.Velocity = cam.CFrame.LookVector * 50
+            else
+                bodyVel:Destroy()
+            end
+        end)
+    end
+end)
+
+-- ==========================================
+-- [Speed Glitch Launch X]
+-- ==========================================
+local SpeedGlitchEnabled = false
+local LaunchEnabled = false
+local SpeedGlitchValue = 100
+local LaunchPowerValue = 100
+local GlitchMode = "Both"
+
+local function SpeedGlitch()
+    if SpeedGlitchEnabled and (GlitchMode == "Speed" or GlitchMode == "Both") then
+        local char = game.Players.LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.Velocity = char.HumanoidRootPart.Velocity + (char.HumanoidRootPart.CFrame.LookVector * SpeedGlitchValue)
+        end
+    end
+end
+
+local function Launch()
+    if LaunchEnabled and (GlitchMode == "Launch" or GlitchMode == "Both") then
+        local char = game.Players.LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.Velocity = Vector3.new(0, LaunchPowerValue, 0)
+        end
+    end
+end
+
+-- ==========================================
+-- [Nuvex Menu ตัวแปร]
+-- ==========================================
+local NoclipEnabled = false
+local flying = false
+local flySpeed = 1
+local bodyVelocity, bodyGyro
+local TPWalkEnabled = false
+local TPWalkDistance = 5
+local InvisibleEnabled = false
+local GodModeEnabled = false
+local HitboxEnabled = false
+
+local function Noclip()
+    if NoclipEnabled then
+        local char = game.Players.LocalPlayer.Character
+        if char then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+end
+
+local function Fly()
+    local char = game.Players.LocalPlayer.Character
+    local humanoid = char and char:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    if flying then
+        flying = false
+        if bodyVelocity then bodyVelocity:Destroy() end
+        if bodyGyro then bodyGyro:Destroy() end
+        humanoid.PlatformStand = false
+    else
+        flying = true
+        bodyVelocity = Instance.new("BodyVelocity")
+        bodyGyro = Instance.new("BodyGyro")
+        bodyVelocity.MaxForce = Vector3.new(1, 1, 1) * 100000
+        bodyGyro.MaxTorque = Vector3.new(1, 1, 1) * 100000
+        bodyVelocity.Parent = char.HumanoidRootPart
+        bodyGyro.Parent = char.HumanoidRootPart
+        humanoid.PlatformStand = true
+        game:GetService("RunService").RenderStepped:Connect(function()
+            if flying then
+                local moveDir = Vector3.new()
+                local cam = workspace.CurrentCamera
+                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CFrame.LookVector end
+                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
+                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
+                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
+                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+                if game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftControl) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+                bodyVelocity.Velocity = moveDir * flySpeed
+                bodyGyro.CFrame = cam.CFrame
+            end
+        end)
+    end
+end
+
+local function TPWalk()
+    if TPWalkEnabled then
+        local char = game.Players.LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local humanoid = char and char:FindFirstChild("Humanoid")
+        if hrp and humanoid and humanoid.MoveDirection.Magnitude > 0 then
+            hrp.CFrame = hrp.CFrame + hrp.CFrame.LookVector * TPWalkDistance
+        end
+    end
+end
+
+local function ToggleInvisible()
+    local char = game.Players.LocalPlayer.Character
+    if InvisibleEnabled and char then
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then v.Transparency = 1 end
+        end
+    elseif char then
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then v.Transparency = 0 end
+        end
+    end
+end
+
+local function ToggleGodMode()
+    local char = game.Players.LocalPlayer.Character
+    local humanoid = char and char:FindFirstChild("Humanoid")
+    if GodModeEnabled and humanoid then
+        humanoid.MaxHealth = math.huge
+        humanoid.Health = math.huge
+        humanoid.BreakJointsOnDeath = false
+    elseif humanoid then
+        humanoid.MaxHealth = 100
+        humanoid.BreakJointsOnDeath = true
+    end
+end
+
+local function ToggleHitbox()
+    for _, v in pairs(game.Players:GetPlayers()) do
+        if v ~= game.Players.LocalPlayer then
+            local targetChar = v.Character
+            if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+                targetChar.HumanoidRootPart.Size = HitboxEnabled and Vector3.new(8, 8, 8) or Vector3.new(2, 2, 1)
+            end
+        end
+    end
+end
+
+game:GetService("ProximityPromptService").PromptButtonHoldBegan:Connect(function(p)
+    if InstantProximityEnabled then fireproximityprompt(p) end
+end)
+
+game:GetService("UserInputService").JumpRequest:Connect(function()
+    if InfiniteJumpEnabled then
+        local char = game.Players.LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then char.Humanoid:ChangeState("Jumping") end
+    end
+end)
+
+-- ==========================================
+-- [Main Render Loop]
+-- ==========================================
+game:GetService("RunService").RenderStepped:Connect(function()
+    FOV_Circle.Position = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y / 2)
+    
+    if AimbotEnabled then
+        local target = GetClosestTarget()
+        if target then SmoothAim(target.Position) end
+    end
+    
+    SpeedGlitch()
+    Launch()
+    
+    if NoclipEnabled then pcall(Noclip) end
+    if TPWalkEnabled then pcall(TPWalk) end
+    if InvisibleEnabled then pcall(ToggleInvisible) end
+    if GodModeEnabled then pcall(ToggleGodMode) end
+    if HitboxEnabled then pcall(ToggleHitbox) else pcall(ToggleHitbox) end
+    
+    if FullBrightEnabled then
+        game.Lighting.Brightness = 2
+        game.Lighting.ClockTime = 14
+        game.Lighting.FogEnd = 100000
+    end
+    
+    if NPCAimEnabled then
+        local target, dist = nil, FOV_Circle.Radius
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("Model") and v:FindFirstChild("Humanoid") and not game.Players:GetPlayerFromCharacter(v) then
+                local head = v:FindFirstChild("Head")
+                if head then
+                    local screenPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(head.Position)
+                    if onScreen then
+                        local mag = (Vector2.new(screenPos.X, screenPos.Y) - FOV_Circle.Position).Magnitude
+                        if mag < dist then dist, target = mag, head end
+                    end
+                end
+            end
+        end
+        if target then workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, target.Position) end
+    end
+    
+    pcall(function()
+        if game.Players.LocalPlayer.Character then
+            game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = WalkSpeedValue
+            game.Players.LocalPlayer.Character.Humanoid.JumpPower = JumpPowerValue
+        end
+        
+        if ESP_Enabled then
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and v:FindFirstChild("Humanoid") and not v:FindFirstChild("G666_ESP") then
+                    local hl = Instance.new("Highlight", v); hl.Name = "G666_ESP"; hl.FillColor = Color3.fromRGB(255, 0, 0)
+                end
+            end
+        end
+        
+        if Object_ESP_Enabled and SelectedObject ~= "None" then
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v.Name:lower():find(SelectedObject:lower()) and not v:FindFirstChild("Obj_HL") then
+                    local hl = Instance.new("Highlight", v); hl.Name = "Obj_HL"; hl.FillColor = Color3.fromRGB(255, 255, 0)
+                end
+            end
+        end
+    end)
+end)
+
+-- ==========================================
+-- [TAB: VISUAL & FOV]
+-- ==========================================
+local VisualTab = Window:CreateTab("Visual & FOV", 4483362458)
+VisualTab:CreateSection("ESP & Visual Tools")
+VisualTab:CreateToggle({ Name = "Enable ESP", CurrentValue = false, Callback = function(V) ESP_Enabled = V end })
+VisualTab:CreateToggle({ Name = "Full Bright", CurrentValue = false, Callback = function(V) FullBrightEnabled = V end })
+VisualTab:CreateButton({ Name = "Plasticine Vision", Callback = function() for _, v in pairs(game:GetDescendants()) do if v:IsA("BasePart") then v.Material = Enum.Material.Plastic v.Reflectance = 0 end end end })
+VisualTab:CreateSection("Object ESP")
+VisualTab:CreateDropdown({ Name = "Select Item", Options = {"None", "Coin", "Key", "Gun", "Knife", "Chest", "Book", "Lever", "Battery"}, CurrentOption = "None", Callback = function(Option) SelectedObject = Option[1] end })
+VisualTab:CreateToggle({ Name = "Enable Object ESP", CurrentValue = false, Callback = function(V) Object_ESP_Enabled = V end })
+VisualTab:CreateSection("FOV Circle")
+VisualTab:CreateToggle({ Name = "Show FOV Circle", CurrentValue = false, Callback = function(V) FOV_Circle.Visible = V end })
+VisualTab:CreateSlider({ Name = "FOV Size", Range = {10, 500}, Increment = 1, CurrentValue = 100, Callback = function(V) FOV_Circle.Radius = V end })
+
+-- ==========================================
+-- [TAB: AIMBOT]
+-- ==========================================
+local AimbotTab = Window:CreateTab("Aimbot", 4483362458)
+AimbotTab:CreateSection("Aimbot Settings")
+AimbotTab:CreateToggle({ Name = "Enable Aimbot", CurrentValue = false, Callback = function(V) AimbotEnabled = V end })
+AimbotTab:CreateToggle({ Name = "Wall Check", CurrentValue = false, Callback = function(V) AimbotWallCheck = V end })
+AimbotTab:CreateToggle({ Name = "Kill Check", CurrentValue = false, Callback = function(V) AimbotKillCheck = V end })
+AimbotTab:CreateToggle({ Name = "Team Check", CurrentValue = false, Callback = function(V) AimbotTeamCheck = V end })
+AimbotTab:CreateSlider({ Name = "Smoothness", Range = {1, 20}, Increment = 1, CurrentValue = 5, Callback = function(V) AimbotSmoothness = V end })
+AimbotTab:CreateSlider({ Name = "Aimbot FOV", Range = {50, 500}, Increment = 10, CurrentValue = 200, Callback = function(V) AimbotFOV = V end })
+AimbotTab:CreateDropdown({ Name = "Target Part", Options = {"Head", "HumanoidRootPart"}, CurrentOption = "Head", Callback = function(Option) AimbotTargetPart = Option[1] end })
+
+-- ==========================================
+-- [TAB: UTILITY]
+-- ==========================================
+local UtilTab = Window:CreateTab("Utility", 4483362458)
+UtilTab:CreateSection("Position Control")
+UtilTab:CreateButton({ Name = "Save Position", Callback = function() SavedPos = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame end })
+UtilTab:CreateButton({ Name = "Teleport to Saved", Callback = function() if SavedPos then game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = SavedPos end end })
+UtilTab:CreateSection("Movement")
+UtilTab:CreateToggle({ Name = "Infinite Jump", CurrentValue = false, Callback = function(V) InfiniteJumpEnabled = V end })
+UtilTab:CreateToggle({ Name = "Instant Proximity", CurrentValue = false, Callback = function(V) InstantProximityEnabled = V end })
+UtilTab:CreateToggle({ Name = "NPC Aim Assist", CurrentValue = false, Callback = function(V) NPCAimEnabled = V end })
+UtilTab:CreateSlider({ Name = "Walk Speed", Range = {16, 500}, Increment = 1, CurrentValue = 16, Callback = function(V) WalkSpeedValue = V end })
+UtilTab:CreateSlider({ Name = "Jump Power", Range = {50, 500}, Increment = 1, CurrentValue = 50, Callback = function(V) JumpPowerValue = V end })
+
+-- ==========================================
+-- [TAB: FLY GUEST 666]
+-- ==========================================
+local FlyTab = Window:CreateTab("Fly Guest 666", 4483362458)
+FlyTab:CreateSection("ควบคุมการบินผู้เล่นอื่น")
+FlyTab:CreateToggle({ Name = "เปิด Fly Guest 666", CurrentValue = false, Callback = function(V) FlyGuestEnabled = V FlyFrame.Visible = V if V then UpdatePlayerList() end end })
+FlyTab:CreateSlider({ Name = "ความเร็ว UP/DOWN", Range = {1, 50}, Increment = 1, CurrentValue = 10, Callback = function(V) FlyGuestSpeed = V end })
+FlyTab:CreateButton({ Name = "รีเฟรชรายชื่อ", Callback = function() UpdatePlayerList() end })
+
+-- ==========================================
+-- [TAB: SPEED GLITCH X]
+-- ==========================================
+local GlitchTab = Window:CreateTab("Speed Glitch X", 4483362458)
+GlitchTab:CreateSection("Speed Glitch Launch X")
+GlitchTab:CreateToggle({ Name = "Enable Speed Glitch", CurrentValue = false, Callback = function(V) SpeedGlitchEnabled = V end })
+GlitchTab:CreateToggle({ Name = "Enable Launch", CurrentValue = false, Callback = function(V) LaunchEnabled = V end })
+GlitchTab:CreateDropdown({ Name = "Glitch Mode", Options = {"Speed Only", "Launch Only", "Both"}, CurrentOption = "Both", Callback = function(Option)
+    if Option == "Speed Only" then GlitchMode = "Speed"
+    elseif Option == "Launch Only" then GlitchMode = "Launch"
+    else GlitchMode = "Both" end end })
+GlitchTab:CreateSlider({ Name = "Speed Glitch Power", Range = {10, 500}, Increment = 10, CurrentValue = 100, Callback = function(V) SpeedGlitchValue = V end })
+GlitchTab:CreateSlider({ Name = "Launch Power", Range = {10, 1000}, Increment = 10, CurrentValue = 100, Callback = function(V) LaunchPowerValue = V end })
+GlitchTab:CreateButton({ Name = "Super Launch", Callback = function() local char = game.Players.LocalPlayer.Character if char and char:FindFirstChild("HumanoidRootPart") then char.HumanoidRootPart.Velocity = Vector3.new(0, 500, 0) end end })
+GlitchTab:CreateButton({ Name = "Super Speed Boost", Callback = function() local char = game.Players.LocalPlayer.Character if char and char:FindFirstChild("HumanoidRootPart") then char.HumanoidRootPart.Velocity = char.HumanoidRootPart.CFrame.LookVector * 300 end end })
+
+-- ==========================================
+-- [TAB: NUVEX MENU]
+-- ==========================================
+local NuvexTab = Window:CreateTab("Nuvex Menu", 4483362458)
+NuvexTab:CreateSection("Main")
+NuvexTab:CreateToggle({ Name = "Noclip", CurrentValue = false, Callback = function(V) NoclipEnabled = V end })
+NuvexTab:CreateToggle({ Name = "Fly", CurrentValue = false, Callback = function(V) if V then Fly() else Fly() end end })
+NuvexTab:CreateSlider({ Name = "Fly Speed", Range = {1, 50}, Increment = 1, CurrentValue = 1, Callback = function(V) flySpeed = V end })
+NuvexTab:CreateButton({ Name = "TP to Mouse", Callback = function() local mouse = game.Players.LocalPlayer:GetMouse() game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(mouse.Hit.p) end })
+NuvexTab:CreateSection("TP Walk")
+NuvexTab:CreateToggle({ Name = "Enable TP Walk", CurrentValue = false, Callback = function(V) TPWalkEnabled = V end })
+NuvexTab:CreateSlider({ Name = "TP Walk Distance", Range = {1, 20}, Increment = 1, CurrentValue = 5, Callback = function(V) TPWalkDistance = V end })
+NuvexTab:CreateSection("Tools")
+NuvexTab:CreateToggle({ Name = "Hitbox", CurrentValue = false, Callback = function(V) HitboxEnabled = V end })
+NuvexTab:CreateButton({ Name = "F3X", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/studiobuilds/F3X/main/F3X.lua"))() end })
+NuvexTab:CreateButton({ Name = "Infinite Yield", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))() end })
+NuvexTab:CreateButton({ Name = "CMD-X", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/CMD-X/CMD-X/master/source"))() end })
+NuvexTab:CreateSection("Troll")
+NuvexTab:CreateButton({ Name = "Fling Self", Callback = function() game.Players.LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 5000, 0) end })
+NuvexTab:CreateButton({ Name = "Freeze Self 3s", Callback = function() local char = game.Players.LocalPlayer.Character if char and char:FindFirstChild("Humanoid") then local old = char.Humanoid.WalkSpeed char.Humanoid.WalkSpeed = 0 task.wait(3) char.Humanoid.WalkSpeed = old end end })
+NuvexTab:CreateButton({ Name = "Loop Kill", Callback = function() spawn(function() while true do game.Players.LocalPlayer.Character.Humanoid.Health = 0 task.wait(0.5) end end) end })
+NuvexTab:CreateSection("Invisible/God")
+NuvexTab:CreateToggle({ Name = "Invisible", CurrentValue = false, Callback = function(V) InvisibleEnabled = V ToggleInvisible() end })
+NuvexTab:CreateToggle({ Name = "God Mode", CurrentValue = false, Callback = function(V) GodModeEnabled = V ToggleGodMode() end })
+
+-- ==========================================
+-- [TAB: GAME SCRIPTS - ครบทุกแมพ + Axon Hub]
+-- ==========================================
+local GameTab = Window:CreateTab("Game Scripts", 4483362458)
+
+GameTab:CreateSection("Slayer Tycoon")
+GameTab:CreateButton({ Name = "Shiro Hub Slayer Tycoon", Callback = function() loadstring(game:HttpGet('https://raw.githubusercontent.com/DarkFusionSSS/SHIRO-X-SLAYERTYCOON/refs/heads/main/SHIR%20SLAYER%20TYCOON'))() end })
+
+GameTab:CreateSection("Knife Ability Test (KAT)")
+GameTab:CreateButton({ Name = "King Hub KAT", Callback = function() pcall(function() loadstring(game:HttpGet('https://raw.githubusercontent.com/zReal-King/Knife-Ability-Test/main/Gui'))() end) end })
+
+GameTab:CreateSection("Evade Hubs")
+GameTab:CreateButton({ Name = "Yin Yang Hub (Evade)", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/yesimsoul/Yin-Yang-Hub/refs/heads/main/evade"))() end })
+GameTab:CreateButton({ Name = "Evade WhakizashiX Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/sccv8/WhakizashiX/refs/heads/main/old%20whakizashi.txt"))() end })
+
+GameTab:CreateSection("Featured & Universal")
+GameTab:CreateButton({ Name = "Zoooo Script", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/ZanoX-Community/ZanoX-Hub/main/Main.lua"))() end })
+GameTab:CreateButton({ Name = "Star light scanner", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Starlight-Scanner-213808"))() end })
+GameTab:CreateButton({ Name = "Lalol Hub", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-lalol-hub-76144"))() end })
+GameTab:CreateButton({ Name = "Overdrive Hub (Universal)", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Overdrive-h-125904"))() end })
+GameTab:CreateButton({ Name = "YARHM HUB (Universal)", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-YARHM-12403"))() end })
+GameTab:CreateButton({ Name = "Axon Hub (มี Key)", Callback = function() loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/97c3f6db55a2cf72141537a85458e5a7.lua"))() end })
+
+GameTab:CreateSection("MM2 (11 รายการ)")
+GameTab:CreateButton({ Name = "SomTank Hub", Callback = function() loadstring(game:HttpGet("https://api.luarmor.net/files/v4/loaders/36aa7a52f557fa2d7e5dbedae04d267b.lua"))() end })
+GameTab:CreateButton({ Name = "Vision Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/orialdev/VisionHub/refs/heads/main/main.lua"))() end })
+GameTab:CreateButton({ Name = "FoxName Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/xv3gasx/Murder-Mystery-2/refs/heads/main/Release.lua"))() end })
+GameTab:CreateButton({ Name = "Exodus Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/script-9209/roblox/refs/heads/main/mm2-keyless-auto"))() end })
+GameTab:CreateButton({ Name = "FarHub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Nuclear1819/MM2-SCRIPT/refs/heads/main/FarHubMM2.lua", true))() end })
+GameTab:CreateButton({ Name = "ryudeenkai Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/ryudeenkai/MM2/refs/heads/main/aimbot.loader"))() end })
+GameTab:CreateButton({ Name = "ElianaHub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/BixieScriptS/Elliana/refs/heads/main/ElianaHub/AIMBOT-SCRIPT/Main.lua"))() end })
+GameTab:CreateButton({ Name = "Project Reverse", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Real-Script-mm2/MurderMystery2/refs/heads/main/MailLua"))() end })
+GameTab:CreateButton({ Name = "1220 Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/1220-128bit/1220Hub/refs/heads/main/1220Hub.lua"))() end })
+GameTab:CreateButton({ Name = "Dias Hub", Callback = function() loadstring(game:HttpGet("https://github.com/DiasMm2Script/murder-Mystery-2/raw/refs/heads/main/murder%20Mystery%202"))() end })
+GameTab:CreateButton({ Name = "Overdrive Hub (MM2)", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/yxkal999YT/overdrivehub.xyz/refs/heads/main/auth.lua", true))() end })
+
+GameTab:CreateSection("Doors & Rivals (5 รายการ)")
+GameTab:CreateButton({ Name = "Ze Script (Doors)", Callback = function() loadstring(game:HttpGet("https://api.jnkie.com/api/v1/luascripts/public/4192419a355cd0233b7416f498b78b91eb87bfb6123a4d214a2aa1e9243c6c72/download"))() end })
+GameTab:CreateButton({ Name = "RapTure Hub (Doors)", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/RaptureOfc/Rapture-Doors-Released-1.0-New/refs/heads/main/Doors%20Release%20Rapture"))() end })
+GameTab:CreateButton({ Name = "Jnhh Hub (Rivals)", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/JNHHGaming/Rivals-Script1/refs/heads/main/JN%20HH%20Gaming",true))() end })
+GameTab:CreateButton({ Name = "Ultimate Control V18", Callback = function() loadstring(game:HttpGet("https://pastebin.com/raw/tffyi0uA"))() end })
+GameTab:CreateButton({ Name = "Snare Rivals", Callback = function() loadstring(game:HttpGet("https://scripts.projectsnare.online/SnareRivals", true))() end })
+
+GameTab:CreateSection("Combat Tools (5 รายการ)")
+GameTab:CreateButton({ Name = "Hitbox Script", Callback = function() loadstring(game:HttpGet("https://pastefy.app/ItfO0tdg/raw"))() end })
+GameTab:CreateButton({ Name = "Tad Hub Aimbot", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Tad-Hub-1/Script/refs/heads/main/TadHub%20Aimbot%20Universal.lua"))() end })
+GameTab:CreateButton({ Name = "Universe Aimbot", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Aimbot-Mobile-34677"))() end })
+GameTab:CreateButton({ Name = "Nexium Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/VetreX1337dev/Scripts/refs/heads/main/NexiumHub.lua"))() end })
+GameTab:CreateButton({ Name = "DropKick Script (Fling)", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Fe-DropKick-Script-165813"))() end })
+
+GameTab:CreateSection("Misc (9 รายการ)")
+GameTab:CreateButton({ Name = "JJS Script", Callback = function() loadstring(game:HttpGet("https://api.jnkie.com/api/v1/luascripts/public/8bd0e0ab3568c5078b6fd8c1e1043c1f91a0abeb575ae984ee3dfb7fddef6ddb/download"))() end })
+GameTab:CreateButton({ Name = "TBO Hub", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/cool5013/TBO/main/TBOscript"))() end })
+GameTab:CreateButton({ Name = "Blade Ball", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/eIysiadev/release/refs/heads/main/bladeware.lua"))() end })
+GameTab:CreateButton({ Name = "Strongest Battlegrounds", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/yqantg-pixel/Find/refs/heads/main/Protected_3334988263341522.lua.txt"))() end })
+GameTab:CreateButton({ Name = "Boxing League", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/SethProYT/boxing-league-script/main/script%22%29%29%28%29"))() end })
+GameTab:CreateButton({ Name = "FPS Boost", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/FRAXXontop/Syrenixscriptz/refs/heads/main/SyrenixFPS.lua"))() end })
+GameTab:CreateButton({ Name = "Wack Hub (คนไทยสร้าง)", Callback = function() loadstring(game:HttpGet("https://raw.githubusercontent.com/wackshopr-tech/script-roblox-all/refs/heads/main/Main-GUI-2.lua"))() end })
+GameTab:CreateButton({ Name = "Catsaken Hub (Forsaken)", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Universal-Script-Idk-catsaken-142474"))() end })
+GameTab:CreateButton({ Name = "FartSaken Hub (Forsaken)", Callback = function() loadstring(game:HttpGet("https://rawscripts.net/raw/Forsaken-*saken-hub-66652"))() end })
+
+-- ==========================================
+-- [TAB: CREDITS]
+-- ==========================================
+local CreditsTab = Window:CreateTab("Credits", 4483362458)
+CreditsTab:CreateSection("Developer")
+CreditsTab:CreateButton({ Name = "Guest666_20 (Tiktok)", Callback = function() end })
+CreditsTab:CreateSection("Contributor")
+CreditsTab:CreateButton({ Name = "x2Swift", Callback = function() end })
+
+Rayfield:Notify({ Title = "Guest 666 Hub V1.4", Content = "โหลดสำเร็จ! ฟังก์ชั่นครบทุกอย่าง + Axon Hub", Duration = 3 })
